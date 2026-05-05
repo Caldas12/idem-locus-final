@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', serif; /* Fonte elegante para os títulos */
+}
+
+/* Configuração de base para garantir que o Light Mode domina */
+body {
+  @apply bg-[#FDFCFB] text-stone-900 antialiased;
+}
+
+/* Títulos elegantes */
+h1, h2, .font-serif {
+  font-family: var(--font-serif);
+}
+
+/* Scrollbar suave para os filtros */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
