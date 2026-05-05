@@ -132,16 +132,6 @@ export const pickupPointSchema = z.object({
     .max(500, 'Endereço deve ter menos de 500 caracteres')
     .optional()
     .or(z.literal('')),
-  latitude: z
-    .number()
-    .min(-90, 'Latitude inválida')
-    .max(90, 'Latitude inválida')
-    .optional(),
-  longitude: z
-    .number()
-    .min(-180, 'Longitude inválida')
-    .max(180, 'Longitude inválida')
-    .optional()
 })
 
 export type PickupPointForm = z.infer<typeof pickupPointSchema>

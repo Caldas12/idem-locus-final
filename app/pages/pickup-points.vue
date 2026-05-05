@@ -10,9 +10,7 @@ const isLoading = ref(false)
 
 const form = ref({
   name: '',
-  address: '',
-  latitude: '',
-  longitude: ''
+  address: ''
 })
 
 const { data: myProfile } = await useAsyncData('pickup-points-profile', async () => {
@@ -33,9 +31,13 @@ const {
   data: pickupPoints,
   refresh: refreshPickupPoints
 } = await useAsyncData('pickup-points-list', async () => {
-  const { data } = await supabase
-    .from('pickup_points')
-    .select('id, owner_id, name, address, latitude, longitude, created_at')
+  await supabase
+  .from('pickup_points')
+  .insert({
+    owner_id: user.value.id,
+    name: form.value.name,
+    address: form.value.address
+  })
     .order('created_at', { ascending: false })
 
   return data || []
@@ -105,8 +107,6 @@ async function createPickupPoint() {
         owner_id: user.value.id,
         name: form.value.name,
         address: form.value.address,
-        latitude: form.value.latitude === '' ? null : Number(form.value.latitude),
-        longitude: form.value.longitude === '' ? null : Number(form.value.longitude)
       })
 
     if (error) {
@@ -116,8 +116,6 @@ async function createPickupPoint() {
     successMessage.value = 'Ponto de recolha criado.'
     form.value.name = ''
     form.value.address = ''
-    form.value.latitude = ''
-    form.value.longitude = ''
 
     await refreshPickupPoints()
   } catch (error) {
@@ -206,24 +204,6 @@ async function updateDeliveryStatus(order, newStatus) {
             <UInput
               v-model="form.address"
               placeholder="Rua, cidade"
-            />
-          </UFormGroup>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <UFormGroup label="Latitude">
-            <UInput
-              v-model="form.latitude"
-              type="number"
-              step="0.000001"
-            />
-          </UFormGroup>
-
-          <UFormGroup label="Longitude">
-            <UInput
-              v-model="form.longitude"
-              type="number"
-              step="0.000001"
             />
           </UFormGroup>
         </div>

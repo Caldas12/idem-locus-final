@@ -33,7 +33,7 @@ const { data: product, pending } = await useAsyncData(`product-${productId}`, as
       created_at,
       profile_id,
       category_id,
-      profiles (id, name, location, avatar_url, latitude, longitude),
+      profiles (id, name, location, avatar_url),
       categories (name)
     `)
     .eq('id', productId)

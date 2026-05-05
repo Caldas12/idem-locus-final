@@ -1,48 +1,77 @@
 <script setup lang="ts">
-useHead({
-  title: 'Política de Privacidade'
+import { ref, computed } from 'vue'
+
+const supabase = useSupabaseClient()
+
+const query = ref('')
+
+const { data: products, pending } = await useAsyncData(
+  'search-products',
+  async () => {
+    let q = supabase
+      .from('products')
+      .select('id, title, description, image, condition, created_at, category_id, categories(name), profiles(location)')
+      .eq('status', 'Disponível')
+      .order('created_at', { ascending: false })
+
+    if (query.value.trim()) {
+      const term = query.value.trim()
+      q = q.or(`title.ilike.%${term}%,description.ilike.%${term}%`)
+    }
+
+    const { data } = await q
+    return data || []
+  },
+  { watch: [query] }
+)
+
+const results = computed(() => {
+  return (products.value || []).map(product => ({
+    id: Number(product.id),
+    image: product.image || '🧺',
+    title: product.title || 'Sem título',
+    description: product.description || 'Sem descrição.',
+    category: product.categories?.name || 'Sem categoria',
+    condition: product.condition || 'Não definido',
+    location: product.profiles?.location || 'Localização não definida',
+    expiry: product.created_at ? new Date(product.created_at).toLocaleDateString('pt-PT') : 'Data não definida',
+    detailsTo: `/produto/${product.id}`,
+    interestTo: `/produto/${product.id}?intent=interest`
+  }))
 })
 </script>
 
 <template>
-  <UContainer class="py-10 max-w-3xl space-y-8">
+  <UContainer class="py-10 space-y-6">
     <div>
-      <h1 class="text-3xl font-bold text-stone-900">
-        Política de Privacidade
+      <h1 class="text-3xl font-bold text-gray-900">
+        Pesquisa
       </h1>
-      <p class="text-stone-500 mt-2">
-        A transparência e o tratamento dos dados na plataforma Idem Locus.
+      <p class="text-gray-500 mt-1">
+        Procura produtos por palavra‑chave.
       </p>
     </div>
 
-    <UCard>
-      <div class="space-y-6 text-stone-700">
-        <section>
-          <h2 class="text-xl font-semibold text-stone-900 mb-2">1. Informação Recolhida</h2>
-          <p>
-            Durante a utilização da plataforma, procedemos à recolha de dados de perfil (nome e localidade de forma pública) e de credenciais de acesso de forma segura através do nosso fornecedor de autenticação.
-          </p>
-        </section>
+    <UInput
+      v-model="query"
+      placeholder="Ex: laranja, cabaz, pão..."
+      icon="i-heroicons-magnifying-glass"
+    />
 
-        <section>
-          <h2 class="text-xl font-semibold text-stone-900 mb-2">2. Utilização da Informação</h2>
-          <p>
-            Os dados recolhidos destinam-se em exclusivo a:
-          </p>
-          <ul class="list-disc pl-5 mt-2 space-y-1">
-            <li>Garantir o contacto local e a proximidade entre utilizadores;</li>
-            <li>Fornecer métricas anónimas relativas ao impacto ambiental e à redução do desperdício alimentar;</li>
-            <li>Assegurar a moderação e segurança da comunidade.</li>
-          </ul>
-        </section>
+    <div v-if="pending" class="text-gray-500">
+      A pesquisar...
+    </div>
 
-        <section>
-          <h2 class="text-xl font-semibold text-stone-900 mb-2">3. Retenção e Eliminação de Dados</h2>
-          <p>
-            Ao solicitar a eliminação da conta, todos os dados de identificação pessoal e os respetivos anúncios em estado ativo são permanentemente apagados do sistema. As transações finalizadas transitam para um estado anónimo e irrecuperável, sendo mantidas isoladamente para registo de métricas da plataforma.
-          </p>
-        </section>
-      </div>
-    </UCard>
+    <div v-else-if="results.length === 0" class="text-gray-500">
+      Sem resultados.
+    </div>
+
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <ProductCard
+        v-for="item in results"
+        :key="item.id"
+        v-bind="item"
+      />
+    </div>
   </UContainer>
 </template>

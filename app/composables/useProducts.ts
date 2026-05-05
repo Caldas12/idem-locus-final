@@ -6,8 +6,8 @@ export const useProducts = () => {
     let query = supabase
       .from('products')
       .select(
-        'id, title, description, image, condition, type, status, is_surprise_basket, created_at, category_id, profiles!inner(name, location, latitude, longitude), categories(name)',
-        { count: 'exact' }
+  'id, title, description, image, condition, type, status, is_surprise_basket, created_at, category_id, profiles!inner(name, location), categories(name)',
+  { count: 'exact' }
       )
       .eq('status', 'Disponível')
       .order('created_at', { ascending: false })
