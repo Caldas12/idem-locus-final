@@ -1,401 +1,111 @@
-<script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useSeller } from '~/composables/useSeller'
-
-definePageMeta({
-  middleware: 'auth'
-})
-
-const user = useSupabaseUser()
-const supabase = useSupabaseClient()
-
-const errorMessage = ref('')
-const successMessage = ref('')
-const isSaving = ref(false)
-const isUpdatingProposal = ref(false)
-const selectedPickupPointByProposal = ref({})
-
-const statusOptions = ['Disponível', 'Indisponível', 'Esgotado']
-const conditionOptions = ['Maduro', 'Fresco', 'Defeito Visual', 'Próximo da validade', 'Embalado']
-const typeOptions = ['Donativo', 'Troca Direta', 'Preço Simbólico']
-
-const editingProductId = ref(null)
-const editForm = ref({
-  id: null,
-  title: '',
-  description: '',
-  image: '',
-  condition: 'Fresco',
-  type: 'Troca Direta',
-  status: 'Disponível',
-  category_id: null,
-  expires_at: '',
-  is_surprise_basket: false
-})
-
-const { data: categories } = await useAsyncData('dashboard-categories', async () => {
-  const { data } = await supabase
-    .from('categories')
-    .select('id, name')
-    .order('name', { ascending: true })
-
-  return (data || []).map(category => ({
-    label: category.name,
-    value: category.id
-  }))
-})
-
-const { data: pickupPoints } = await useAsyncData('dashboard-pickup-points', async () => {
-  const { data } = await supabase
-    .from('pickup_points')
-    .select('id, name')
-    .order('name', { ascending: true })
-
-  return data || []
-})
-
-const {
-  data: _myProducts,
-  refresh: refreshMyProducts
-} = await useAsyncData('dashboard-my-products', async () => {
-  if (!user.value) {
-    return []
-  }
-
-  const { data } = await supabase
-    .from('products')
-    .select('id, title, description, image, condition, type, status, category_id, expires_at, is_surprise_basket, created_at')
-    .eq('profile_id', user.value.id)
-    .order('created_at', { ascending: false })
-
-  return data || []
-})
-
-const {
-  data: proposalItems,
-  refresh: refreshProposals
-} = await useAsyncData('dashboard-proposals', async () => {
-  if (!user.value) {
-    return []
-  }
-
-  const { data } = await supabase
-    .from('proposals')
-    .select(`
-      id, product_id, conversation_id, buyer_id, status, pickup_point_id, pickup_status, created_at,
-      product:products (id, title),
-      buyer:profiles!proposals_buyer_id_fkey (id, name)
-    `)
-    .eq('seller_id', user.value.id)
-    .order('created_at', { ascending: false })
-
-  return data || []
-})
-
-const _detailedProposals = computed(() => {
-  return (proposalItems.value || []).map(proposal => ({
-    ...proposal,
-    pickupPoint: (pickupPoints.value || []).find(point => point.id === proposal.pickup_point_id) || null
-  }))
-})
-
-const _pickupPointOptions = computed(() => {
-  return (pickupPoints.value || []).map(point => ({
-    label: point.name,
-    value: point.id
-  }))
-})
-
-function _openEdit(product: { id: number, title: string, description: string, image: string, condition: string, type: string, status: string, category_id: number, expires_at: string, is_surprise_basket: boolean }) {
-  editingProductId.value = product.id
-  editForm.value = {
-    id: product.id,
-    title: product.title,
-    description: product.description || '',
-    image: product.image || '',
-    condition: product.condition || 'Fresco',
-    type: product.type || 'Troca Direta',
-    status: product.status || 'Disponível',
-    category_id: product.category_id,
-    expires_at: product.expires_at ? String(product.expires_at).slice(0, 10) : '',
-    is_surprise_basket: Boolean(product.is_surprise_basket)
-  }
-}
-
-function cancelEdit() {
-  editingProductId.value = null
-}
-
-async function saveEdit() {
-  if (!editForm.value.id) {
-    return
-  }
-
-  isSaving.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
-
-  try {
-    const { error } = await supabase
-      .from('products')
-      .update({
-        title: editForm.value.title,
-        description: editForm.value.description,
-        image: editForm.value.image || '🧺',
-        condition: editForm.value.condition,
-        type: editForm.value.type,
-        status: editForm.value.status,
-        category_id: editForm.value.category_id,
-        expires_at: editForm.value.expires_at || null,
-        is_surprise_basket: editForm.value.is_surprise_basket
-      })
-      .eq('id', editForm.value.id)
-      .eq('profile_id', user.value.id)
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    successMessage.value = 'Produto atualizado.'
-    editingProductId.value = null
-    await refreshMyProducts()
-  } catch (error) {
-    errorMessage.value = error.message || 'Não foi possível atualizar o produto.'
-  } finally {
-    isSaving.value = false
-  }
-}
-
-async function _updateQuickStatus(productId: number, newStatus: string) {
-  await supabase
-    .from('products')
-    .update({ status: newStatus })
-    .eq('id', productId)
-    .eq('profile_id', user.value.id)
-
-  await refreshMyProducts()
-}
-
-async function _removeProduct(productId: number) {
-  if (!confirm('Queres mesmo remover este produto?')) {
-    return
-  }
-
-  await supabase
-    .from('products')
-    .delete()
-    .eq('id', productId)
-    .eq('profile_id', user.value.id)
-
-  await refreshMyProducts()
-}
-
-async function _updateProposal(proposal: { id: number, product_id: number, buyer_id: string }, newStatus: string) {
-  isUpdatingProposal.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
-
-  try {
-    const { error } = await supabase
-      .from('proposals')
-      .update({ status: newStatus })
-      .eq('id', proposal.id)
-      .eq('seller_id', user.value.id)
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    if (newStatus === 'accepted') {
-      await supabase
-        .from('products')
-        .update({ status: 'Indisponível' })
-        .eq('id', proposal.product_id)
-        .eq('profile_id', user.value.id)
-    }
-
-    if (newStatus === 'completed') {
-      await supabase
-        .from('products')
-        .update({ status: 'Esgotado' })
-        .eq('id', proposal.product_id)
-        .eq('profile_id', user.value.id)
-    }
-
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: proposal.buyer_id,
-        type: 'proposal',
-        title: 'Atualização de proposta',
-        body: `A tua proposta foi marcada como ${newStatus}.`,
-        payload: { proposal_id: proposal.id, product_id: proposal.product_id }
-      })
-
-    successMessage.value = 'Proposta atualizada.'
-
-    await Promise.all([
-      refreshProposals(),
-      refreshMyProducts()
-    ])
-  } catch (error) {
-    errorMessage.value = error.message || 'Não foi possível atualizar a proposta.'
-  } finally {
-    isUpdatingProposal.value = false
-  }
-}
-
-async function _assignPickupPoint(proposal: { id: number, buyer_id: string }) {
-  const selectedPointId = Number(selectedPickupPointByProposal.value[proposal.id])
-
-  if (!Number.isFinite(selectedPointId) || selectedPointId <= 0) {
-    errorMessage.value = 'Seleciona um ponto de recolha válido.'
-    return
-  }
-
-  errorMessage.value = ''
-  successMessage.value = ''
-
-  try {
-    const { error } = await supabase
-      .from('proposals')
-      .update({
-        pickup_point_id: selectedPointId,
-        pickup_status: 'pending'
-      })
-      .eq('id', proposal.id)
-      .eq('seller_id', user.value.id)
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: proposal.buyer_id,
-        type: 'pickup',
-        title: 'Ponto de recolha definido',
-        body: 'O vendedor associou um ponto de recolha à proposta.',
-        payload: { proposal_id: proposal.id, pickup_point_id: selectedPointId }
-      })
-
-    successMessage.value = 'Ponto de recolha atribuído.'
-    await refreshProposals()
-  } catch (error) {
-    errorMessage.value = error.message || 'Não foi possível atribuir o ponto de recolha.'
-  }
-}
-</script>
-
-<template v-if="editingProductId === product.id">
-  <div class="space-y-6 bg-[#F5EFE6] p-6 rounded-xl border border-[#E6D5C3] shadow-inner">
-    <div class="flex items-center gap-2 border-b border-[#E6D5C3] pb-3 mb-4">
-      <UIcon
-        name="i-heroicons-pencil-square"
-        class="text-amber-600 text-xl"
-      />
-      <h3 class="font-bold text-lg text-[#4A3B32]">
-        A Editar Produto
-      </h3>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="space-y-6">
-        <UFormGroup
-          label="Título"
-          description="O nome do teu anúncio."
-        >
-          <UInput
-            v-model="editForm.title"
-            placeholder="Título"
-          />
-        </UFormGroup>
-
-        <UFormGroup
-          label="Descrição"
-          description="Detalhes sobre a tua oferta."
-        >
-          <UTextarea
-            v-model="editForm.description"
-            autoresize
-            placeholder="Descrição"
-          />
-        </UFormGroup>
-
-        <UFormGroup label="Imagem (URL ou Emoji)">
-          <UInput
-            v-model="editForm.image"
-            placeholder="Ex: 🍎 ou https://..."
-          />
-        </UFormGroup>
+<template>
+  <UContainer class="py-10 space-y-12">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-stone-200 pb-6">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 font-serif">O Meu Dashboard</h1>
+        <p class="text-gray-500 mt-1">Gere os teus produtos e responde às propostas da comunidade.</p>
       </div>
-
-      <div class="space-y-6">
-        <div class="grid grid-cols-2 gap-4">
-          <UFormGroup label="Estado Físico">
-            <USelect
-              v-model="editForm.condition"
-              :options="conditionOptions"
-            />
-          </UFormGroup>
-          <UFormGroup label="Tipo">
-            <USelect
-              v-model="editForm.type"
-              :options="typeOptions"
-            />
-          </UFormGroup>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-          <UFormGroup label="Visibilidade">
-            <USelect
-              v-model="editForm.status"
-              :options="statusOptions"
-            />
-          </UFormGroup>
-          <UFormGroup label="Categoria">
-            <USelect
-              v-model="editForm.category_id"
-              :options="categories"
-            />
-          </UFormGroup>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4 items-end">
-          <UFormGroup label="Validade">
-            <UInput
-              v-model="editForm.expires_at"
-              type="date"
-            />
-          </UFormGroup>
-
-          <UFormGroup>
-            <UCheckbox
-              v-model="editForm.is_surprise_basket"
-              label="Cabaz Surpresa"
-            />
-          </UFormGroup>
-        </div>
-      </div>
-    </div>
-
-    <div class="flex gap-3 justify-end pt-4 mt-2 border-t border-[#E6D5C3]">
-      <UButton
-        color="gray"
-        variant="ghost"
-        @click="cancelEdit"
-      >
-        Cancelar
-      </UButton>
-      <UButton
-        color="primary"
-        icon="i-heroicons-check"
-        :loading="isSaving"
-        @click="saveEdit"
-      >
-        Guardar Alterações
+      <UButton to="/publish" color="amber" icon="i-heroicons-plus" size="lg" class="bg-[#C5893C] hover:bg-[#A87431]">
+        Publicar Novo
       </UButton>
     </div>
-  </div>
+
+    <UAlert v-if="errorMessage" color="red" variant="soft" :title="errorMessage" />
+    <UAlert v-if="successMessage" color="green" variant="soft" :title="successMessage" />
+
+    <section>
+      <h2 class="text-xl font-bold text-stone-800 mb-4 flex items-center gap-2">
+        <UIcon name="i-heroicons-inbox-arrow-down" class="text-[#C5893C]" /> Propostas Recebidas
+      </h2>
+      <div v-if="!_detailedProposals || _detailedProposals.length === 0" class="text-center py-8 bg-white rounded-xl border border-stone-200 shadow-sm">
+        <p class="text-stone-500">Ainda não recebeste nenhuma manifestação de interesse.</p>
+      </div>
+      <div v-else class="space-y-4">
+        <UCard v-for="prop in _detailedProposals" :key="prop.id" class="shadow-sm border-stone-200">
+          <div class="flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div>
+              <p class="font-bold text-stone-900 text-lg">{{ prop.product?.title || 'Produto Removido' }}</p>
+              <p class="text-sm text-stone-600 flex items-center gap-1 mt-1">
+                <UIcon name="i-heroicons-user" /> De: <strong>{{ prop.buyer?.name || 'Utilizador' }}</strong>
+              </p>
+              <UBadge :color="prop.status === 'pending' ? 'amber' : prop.status === 'accepted' ? 'green' : 'gray'" class="mt-2 uppercase tracking-wider text-[10px]">
+                {{ prop.status === 'pending' ? 'Pendente' : prop.status === 'accepted' ? 'Aceite' : prop.status === 'completed' ? 'Concluída' : 'Rejeitada' }}
+              </UBadge>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <UButton :to="`/inbox/${prop.conversation_id}`" color="stone" variant="soft" icon="i-heroicons-chat-bubble-left-ellipsis">Chat</UButton>
+
+              <template v-if="prop.status === 'pending'">
+                <UButton color="green" @click="_updateProposal(prop, 'accepted')" :loading="isUpdatingProposal" icon="i-heroicons-check">Aceitar</UButton>
+                <UButton color="red" variant="soft" @click="_updateProposal(prop, 'rejected')" :loading="isUpdatingProposal" icon="i-heroicons-x-mark">Rejeitar</UButton>
+              </template>
+
+              <template v-else-if="prop.status === 'accepted'">
+                <UButton color="amber" @click="_updateProposal(prop, 'completed')" :loading="isUpdatingProposal" icon="i-heroicons-check-circle" class="bg-[#C5893C] text-white">
+                  Marcar como Entregue
+                </UButton>
+              </template>
+            </div>
+          </div>
+        </UCard>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-stone-800 mb-4 flex items-center gap-2">
+        <UIcon name="i-heroicons-squares-2x2" class="text-[#C5893C]" /> Os Meus Produtos
+      </h2>
+      <div v-if="!_myProducts || _myProducts.length === 0" class="text-center py-12 bg-white rounded-xl border border-stone-200 shadow-sm">
+        <p class="text-stone-500">Ainda não publicaste nenhum produto.</p>
+      </div>
+
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <UCard v-for="product in _myProducts" :key="product.id" class="flex flex-col h-full overflow-hidden shadow-sm hover:shadow-md transition-shadow border-stone-200" :ui="{ body: { padding: 'p-0 sm:p-0' } }">
+
+          <template v-if="editingProductId !== product.id">
+            <div class="h-48 bg-[#FAF9F6] flex items-center justify-center border-b border-stone-100 overflow-hidden relative">
+              <img v-if="product.image && product.image.startsWith('http')" :src="product.image" class="w-full h-full object-cover" />
+              <span v-else class="text-6xl">{{ product.image || '📦' }}</span>
+              <UBadge class="absolute top-2 left-2 shadow-sm font-bold" :color="product.status === 'Disponível' ? 'green' : 'red'">{{ product.status }}</UBadge>
+            </div>
+
+            <div class="p-5 flex-1 flex flex-col">
+              <h3 class="font-bold text-lg text-stone-900 line-clamp-1 mb-1">{{ product.title }}</h3>
+              <p class="text-sm text-stone-500 line-clamp-2 mb-4 flex-1">{{ product.description }}</p>
+
+              <div class="flex gap-2 mt-auto pt-4 border-t border-stone-100">
+                <UButton class="flex-1 justify-center font-bold" size="sm" color="amber" variant="soft" icon="i-heroicons-pencil" @click="_openEdit(product)">Editar</UButton>
+                <UButton size="sm" color="red" variant="ghost" icon="i-heroicons-trash" @click="_removeProduct(product.id)" />
+              </div>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="p-4 bg-amber-50 h-full flex flex-col space-y-3">
+              <div class="flex items-center gap-2 border-b border-amber-200 pb-2">
+                <UIcon name="i-heroicons-pencil-square" class="text-amber-700 text-lg" />
+                <h3 class="font-bold text-amber-900 text-sm">Editar Anúncio</h3>
+              </div>
+
+              <UInput v-model="editForm.title" placeholder="Título" size="sm" class="bg-white" />
+              <UTextarea v-model="editForm.description" placeholder="Descrição" size="sm" :rows="2" autoresize class="bg-white" />
+              <UInput v-model="editForm.image" placeholder="URL Imagem ou Emoji" size="sm" class="bg-white" />
+
+              <div class="grid grid-cols-2 gap-2">
+                <USelect v-model="editForm.status" :options="statusOptions" size="sm" class="bg-white" />
+                <USelect v-model="editForm.condition" :options="conditionOptions" size="sm" class="bg-white" />
+              </div>
+
+              <div class="flex gap-2 mt-auto pt-2 border-t border-amber-200">
+                <UButton class="flex-1 justify-center font-bold" size="sm" color="green" @click="saveEdit" :loading="isSaving">Guardar</UButton>
+                <UButton size="sm" color="stone" variant="ghost" @click="cancelEdit">X</UButton>
+              </div>
+            </div>
+          </template>
+
+        </UCard>
+      </div>
+    </section>
+  </UContainer>
 </template>

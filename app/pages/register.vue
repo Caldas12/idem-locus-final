@@ -1,201 +1,84 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { loginSchema, registerSchema, validateForm } from '~/utils/validation'
 
 const supabase = useSupabaseClient()
-
 const email = ref('')
 const password = ref('')
-const confirmPassword = ref('')
-const isLoading = ref(false)
-const errorMessage = ref('')
-const infoMessage = ref('')
-const isRegistering = ref(false)
-const fieldErrors = ref<Record<string, string>>({})
+const name = ref('')
+const loading = ref(false)
+const toast = useToast()
 
-async function verifyUserBlockStatus(userId: string) {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_suspended, is_banned')
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (profile?.is_banned) {
-    await supabase.auth.signOut()
-    throw new Error('Esta conta foi banida.')
-  }
-
-  if (profile?.is_suspended) {
-    await supabase.auth.signOut()
-    throw new Error('Esta conta está suspensa.')
-  }
-}
-
-async function login() {
-  fieldErrors.value = {}
-  errorMessage.value = ''
-  infoMessage.value = ''
-
-  // Validate form
-  const validation = validateForm(loginSchema, {
-    email: email.value,
-    password: password.value
-  })
-
-  if (!validation.success) {
-    fieldErrors.value = validation.errors || {}
-    return
-  }
-
-  isLoading.value = true
-
+async function handleRegister() {
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    loading.value = true
+
+    const { error: authError } = await supabase.auth.signUp({
       email: email.value,
-      password: password.value
+      password: password.value,
+      options: {
+        data: { full_name: name.value }
+      }
     })
 
-    if (error) throw new Error('Email ou palavra-passe incorretos.')
+    if (authError) throw authError
 
-    if (data.user) {
-      await verifyUserBlockStatus(data.user.id)
-    }
-
-    navigateTo('/')
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Não foi possível iniciar sessão.'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-async function register() {
-  fieldErrors.value = {}
-  errorMessage.value = ''
-  infoMessage.value = ''
-
-  // Validate form
-  const validation = validateForm(registerSchema, {
-    email: email.value,
-    password: password.value,
-    confirmPassword: confirmPassword.value
-  })
-
-  if (!validation.success) {
-    fieldErrors.value = validation.errors || {}
-    return
-  }
-
-  isLoading.value = true
-
-  try {
-    const { error } = await supabase.auth.signUp({
-      email: email.value,
-      password: password.value
+    toast.add({
+      title: 'Conta criada!',
+      description: 'Verifique o seu email para confirmar o registo.',
+      color: 'green'
     })
 
-    if (error) throw new Error(error.message)
-
-    // The database now handles profile creation automatically.
-    infoMessage.value = 'Conta criada com sucesso! Podes entrar.'
-    email.value = ''
-    password.value = ''
-    confirmPassword.value = ''
-    isRegistering.value = false
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Não foi possível criar a conta.'
+    navigateTo('/login')
+  } catch (error: any) {
+    toast.add({ title: 'Erro no registo', description: error.message, color: 'red' })
   } finally {
-    isLoading.value = false
+    loading.value = false
   }
 }
 </script>
 
 <template>
-  <UContainer class="py-20 flex justify-center">
-    <UCard class="w-full max-w-md">
+  <UContainer class="max-w-md py-20">
+    <UCard class="shadow-lg border border-stone-200">
       <template #header>
-        <h2 class="text-2xl font-bold text-center">
-          {{ isRegistering ? 'Criar Conta' : 'Bem-vindo à Praça' }}
-        </h2>
+        <h1 class="text-2xl font-bold text-center text-stone-900 font-serif">Criar Conta</h1>
       </template>
 
-      <div class="space-y-4">
-        <UAlert
-          v-if="errorMessage"
-          color="error"
-          variant="soft"
-          :title="errorMessage"
-          icon="i-heroicons-exclamation-triangle"
-        />
-        <UAlert
-          v-if="infoMessage"
-          color="success"
-          variant="soft"
-          :title="infoMessage"
-          icon="i-heroicons-check-circle"
-        />
+      <form @submit.prevent="handleRegister" class="space-y-6">
 
-        <UFormGroup
-          label="E-mail"
-          :error="fieldErrors.email"
-        >
-          <UInput
-            v-model="email"
-            type="email"
-            placeholder="oteu@email.com"
-            icon="i-heroicons-envelope"
-            :color="fieldErrors.email ? 'error' : undefined"
-          />
-        </UFormGroup>
+        <div class="space-y-2">
+          <label class="block text-sm font-semibold text-stone-800">Nome Completo</label>
+          <UInput v-model="name" placeholder="Como o queríamos chamar" icon="i-heroicons-user" size="lg" required class="w-full" />
+        </div>
 
-        <UFormGroup
-          label="Palavra-passe"
-          :error="fieldErrors.password"
-        >
-          <UInput
-            v-model="password"
-            type="password"
-            placeholder="••••••••"
-            icon="i-heroicons-lock-closed"
-            :color="fieldErrors.password ? 'error' : undefined"
-          />
-        </UFormGroup>
+        <div class="space-y-2">
+          <label class="block text-sm font-semibold text-stone-800">Email</label>
+          <UInput v-model="email" type="email" placeholder="exemplo@dominio.com" icon="i-heroicons-envelope" size="lg" required class="w-full" />
+        </div>
 
-        <UFormGroup
-          v-if="isRegistering"
-          label="Confirmar Palavra-passe"
-          :error="fieldErrors.confirmPassword"
-        >
-          <UInput
-            v-model="confirmPassword"
-            type="password"
-            placeholder="••••••••"
-            icon="i-heroicons-lock-closed"
-            :color="fieldErrors.confirmPassword ? 'error' : undefined"
-          />
-        </UFormGroup>
+        <div class="space-y-2">
+          <label class="block text-sm font-semibold text-stone-800">Palavra-passe</label>
+          <UInput v-model="password" type="password" icon="i-heroicons-lock-closed" size="lg" required class="w-full" />
+        </div>
 
-        <div class="flex flex-col gap-2 mt-6">
+        <div class="pt-4">
           <UButton
-            :loading="isLoading"
-            block
-            color="primary"
+            type="submit"
             size="lg"
-            @click="isRegistering ? register() : login()"
+            :loading="loading"
+            class="w-full flex justify-center bg-[#C5893C] hover:bg-[#A87431] text-white font-bold py-3 rounded-lg transition-colors"
           >
-            {{ isRegistering ? 'Criar Conta' : 'Entrar' }}
-          </UButton>
-          <UButton
-            :loading="isLoading"
-            block
-            color="secondary"
-            variant="ghost"
-            @click="isRegistering = !isRegistering"
-          >
-            {{ isRegistering ? 'Voltar ao Login' : 'Criar nova conta' }}
+            Registar
           </UButton>
         </div>
-      </div>
+      </form>
+
+      <template #footer>
+        <p class="text-sm text-center text-stone-500">
+          Já tem uma conta?
+          <NuxtLink to="/login" class="text-[#C5893C] font-bold hover:underline">Inicie sessão</NuxtLink>
+        </p>
+      </template>
     </UCard>
   </UContainer>
 </template>
