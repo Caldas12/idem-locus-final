@@ -82,7 +82,6 @@ function isFavorite() {
   if (!product.value) {
     return false
   }
-
   return favoriteIds.value.includes(product.value.id)
 }
 
@@ -91,7 +90,6 @@ async function loadFavorites() {
     favoriteIds.value = []
     return
   }
-
   const { data } = await supabase
     .from('favorites')
     .select('product_id')
@@ -147,10 +145,7 @@ async function toggleFavorite() {
     navigateTo('/login')
     return
   }
-
-  if (!product.value) {
-    return
-  }
+  if (!product.value) return
 
   if (isFavorite()) {
     await supabase
@@ -166,7 +161,6 @@ async function toggleFavorite() {
         product_id: product.value.id
       })
   }
-
   await loadFavorites()
 }
 
@@ -175,10 +169,7 @@ async function startInterestConversation() {
     navigateTo('/login')
     return
   }
-
-  if (!product.value) {
-    return
-  }
+  if (!product.value) return
 
   const buyerId = user.value.id
   const sellerId = product.value.profile_id
@@ -221,7 +212,6 @@ async function startInterestConversation() {
       if (conversationError || !newConversation?.id) {
         throw new Error(conversationError?.message || 'Não foi possível criar a conversa.')
       }
-
       conversationId = newConversation.id
     }
 
@@ -331,210 +321,168 @@ watch(
 
 <template>
   <UContainer class="py-10 space-y-6">
-    <div
-      v-if="pending"
-      class="text-center py-20"
-    >
-      <UIcon
-        name="i-heroicons-arrow-path"
-        class="animate-spin text-5xl text-green-500"
-      />
-      <p class="mt-4 text-gray-500">
-        A carregar detalhes...
-      </p>
+    <div v-if="pending" class="text-center py-20">
+      <UIcon name="i-heroicons-arrow-path" class="animate-spin text-5xl text-[#C5893C]" />
+      <p class="mt-4 text-stone-500 font-medium">A colher os detalhes...</p>
     </div>
 
-    <div
-      v-else-if="!product"
-      class="text-center py-20"
-    >
-      <h2 class="text-2xl font-bold text-red-600">
-        Produto não encontrado
-      </h2>
-      <UButton
-        to="/"
-        class="mt-4"
-        color="gray"
-      >
-        Voltar ao Início
+    <div v-else-if="!product" class="text-center py-20 bg-white rounded-2xl shadow-sm border border-stone-200">
+      <UIcon name="i-heroicons-archive-box-x-mark" class="text-6xl text-stone-300 mb-4" />
+      <h2 class="text-2xl font-bold text-stone-800 font-serif">Produto não encontrado</h2>
+      <p class="text-stone-500 mb-6 mt-2">O produto que procuras pode ter sido removido ou já não estar disponível.</p>
+      <UButton to="/" color="stone" class="bg-stone-800 hover:bg-stone-700 text-white">
+        Voltar à Praça
       </UButton>
     </div>
 
     <template v-else>
-      <UButton
-        to="/"
-        color="gray"
-        variant="ghost"
-        icon="i-heroicons-arrow-left"
-      >
+      <UButton to="/" color="stone" variant="ghost" icon="i-heroicons-arrow-left" class="mb-4 hover:bg-stone-100">
         Voltar à Praça
       </UButton>
 
-      <UAlert
-        v-if="errorMessage"
-        color="red"
-        variant="soft"
-        :title="errorMessage"
-      />
+      <UAlert v-if="errorMessage" color="red" variant="soft" :title="errorMessage" class="mb-6" />
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div class="bg-gray-100 rounded-xl h-96 flex items-center justify-center relative overflow-hidden">
-          <img
-            v-if="isImageUrl(product.image)"
-            :src="product.image"
-            alt="Imagem do produto"
-            class="w-full h-full object-cover"
-          >
-          <span
-            v-else
-            class="text-9xl"
-          >
-            {{ product.image || '🧺' }}
-          </span>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
 
-          <UBadge
-            class="absolute top-4 right-4"
-            color="green"
-          >
+        <div class="bg-[#FAF9F6] rounded-[2rem] h-[450px] flex items-center justify-center relative overflow-hidden border border-stone-100 shadow-sm">
+          <img v-if="isImageUrl(product.image)" :src="product.image" alt="Imagem do produto" class="w-full h-full object-cover">
+          <span v-else class="text-9xl drop-shadow-md">{{ product.image || '🧺' }}</span>
+
+          <UBadge class="absolute top-6 right-6 font-bold shadow-sm px-3 py-1" color="amber" variant="solid">
             {{ product.categories?.name || 'Sem categoria' }}
           </UBadge>
 
-          <UBadge
-            v-if="product.is_surprise_basket"
-            class="absolute top-4 left-4"
-            color="orange"
-          >
+          <UBadge v-if="product.is_surprise_basket" class="absolute top-6 left-6 shadow-sm px-3 py-1" color="rose" variant="solid">
             Cabaz Surpresa
           </UBadge>
         </div>
 
-        <div class="space-y-4">
-          <div class="flex items-start justify-between gap-3">
-            <h1 class="text-4xl font-bold text-gray-900">
-              {{ product.title }}
-            </h1>
+        <div class="space-y-6 flex flex-col justify-center">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-[#C5893C] font-semibold text-sm tracking-widest uppercase mb-2">{{ product.type }}</p>
+              <h1 class="text-4xl md:text-5xl font-bold text-stone-900 font-serif leading-tight">
+                {{ product.title }}
+              </h1>
+            </div>
             <UButton
-              color="gray"
+              color="stone"
               variant="ghost"
+              size="xl"
+              class="hover:bg-rose-50"
+              :class="isFavorite() ? 'text-rose-500' : 'text-stone-400'"
               :icon="isFavorite() ? 'i-heroicons-heart-solid' : 'i-heroicons-heart'"
               @click="toggleFavorite"
             />
           </div>
 
-          <p class="text-green-700 font-semibold">
-            {{ product.type }}
-          </p>
-          <p class="text-sm">
-            <strong>Estado de disponibilidade:</strong> {{ product.status }}
-          </p>
-          <p class="text-sm">
-            <strong>Estado físico:</strong> {{ product.condition }}
-          </p>
-          <p class="text-sm">
-            <strong>Validade:</strong> {{ product.expires_at ? new Date(product.expires_at).toLocaleDateString() : 'Não definida' }}
-          </p>
+          <div class="grid grid-cols-2 gap-4 py-4 border-y border-stone-100">
+            <div>
+              <p class="text-xs text-stone-400 uppercase font-bold tracking-wider mb-1">Disponibilidade</p>
+              <UBadge :color="product.status === 'Disponível' ? 'green' : 'stone'" variant="subtle">{{ product.status }}</UBadge>
+            </div>
+            <div>
+              <p class="text-xs text-stone-400 uppercase font-bold tracking-wider mb-1">Estado Físico</p>
+              <p class="text-stone-800 font-medium">{{ product.condition }}</p>
+            </div>
+            <div class="col-span-2">
+              <p class="text-xs text-stone-400 uppercase font-bold tracking-wider mb-1">Data Limite / Validade</p>
+              <p class="text-stone-800 flex items-center gap-2">
+                <UIcon name="i-heroicons-calendar" class="text-stone-400"/>
+                {{ product.expires_at ? new Date(product.expires_at).toLocaleDateString('pt-PT') : 'Não definida' }}
+              </p>
+            </div>
+          </div>
 
           <div>
-            <p class="font-semibold mb-1">
-              Descrição
-            </p>
-            <p class="text-gray-700">
-              {{ product.description || 'Sem descrição.' }}
+            <h3 class="font-bold text-lg text-stone-900 mb-2 font-serif">Descrição</h3>
+            <p class="text-stone-600 leading-relaxed">
+              {{ product.description || 'O produtor não forneceu detalhes adicionais sobre este excedente.' }}
             </p>
           </div>
 
-          <UCard>
-            <div class="space-y-1">
-              <p class="text-xs text-gray-500 uppercase tracking-wide font-bold">
-                Produtor
-              </p>
-              <p class="text-lg font-medium">
-                {{ product.profiles?.name || 'Produtor' }}
-              </p>
-              <p class="text-sm text-gray-600">
-                {{ product.profiles?.location || 'Localização não definida' }}
+          <div class="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm flex items-center gap-4">
+            <UAvatar :src="product.profiles?.avatar_url" :alt="product.profiles?.name" size="lg" class="bg-stone-100" />
+            <div>
+              <p class="text-xs text-stone-400 uppercase tracking-wider font-bold mb-0.5">Publicado por</p>
+              <p class="text-lg font-bold text-stone-900">{{ product.profiles?.name || 'Produtor Local' }}</p>
+              <p class="text-sm text-stone-500 flex items-center gap-1 mt-0.5">
+                <UIcon name="i-heroicons-map-pin" /> {{ product.profiles?.location || 'Localização não definida' }}
               </p>
             </div>
-          </UCard>
+          </div>
 
           <UButton
             block
-            size="lg"
-            color="green"
+            size="xl"
+            class="bg-[#1A3A2A] hover:bg-[#122A1E] text-white font-bold py-4 rounded-xl shadow-md transition-all flex justify-center mt-4"
             icon="i-heroicons-chat-bubble-left-right"
             :loading="isInterestLoading"
             @click="startInterestConversation"
           >
-            Tenho Interesse / Iniciar Conversa
+            Tenho Interesse / Contactar
           </UButton>
         </div>
       </div>
 
-      <UCard>
+      <UCard class="mt-12 border-stone-200 shadow-sm rounded-2xl">
         <template #header>
-          <h2 class="text-xl font-bold">
-            Avaliações
+          <h2 class="text-2xl font-bold text-stone-900 font-serif flex items-center gap-2">
+            <UIcon name="i-heroicons-star" class="text-amber-400" /> Avaliações da Comunidade
           </h2>
         </template>
 
-        <div class="space-y-4">
-          <div
-            v-if="!reviews || reviews.length === 0"
-            class="text-sm text-gray-500"
-          >
-            Ainda não existem avaliações para este produto.
-          </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div class="space-y-4">
+            <div v-if="!reviews || reviews.length === 0" class="text-stone-500 italic bg-stone-50 p-6 rounded-xl border border-stone-100">
+              Ainda não existem avaliações para este produto.
+            </div>
 
-          <div
-            v-for="item in reviews"
-            :key="item.id"
-            class="border border-gray-100 rounded-lg p-4"
-          >
-            <div class="flex justify-between items-center mb-1">
-              <p class="font-medium">
-                {{ item.reviewer_name || 'Utilizador' }}
-              </p>
-              <p class="text-sm text-amber-700 font-semibold">
-                {{ item.rating }}/5
+            <div v-for="item in reviews" :key="item.id" class="border border-stone-100 bg-white rounded-xl p-5 shadow-sm">
+              <div class="flex justify-between items-center mb-2">
+                <p class="font-bold text-stone-800 flex items-center gap-2">
+                  <UIcon name="i-heroicons-user-circle" class="text-stone-400" />
+                  {{ item.reviewer_name || 'Utilizador' }}
+                </p>
+                <div class="flex items-center text-[#C5893C] font-bold text-sm bg-amber-50 px-2 py-1 rounded-md">
+                  <UIcon name="i-heroicons-star-solid" class="mr-1" /> {{ item.rating }}/5
+                </div>
+              </div>
+              <p class="text-stone-600">
+                "{{ item.comment || 'Sem comentário.' }}"
               </p>
             </div>
-            <p class="text-sm text-gray-700">
-              {{ item.comment || 'Sem comentário.' }}
-            </p>
           </div>
 
-          <div class="border-t border-gray-100 pt-4 space-y-3">
-            <p class="text-sm font-medium">
-              Submeter avaliação
-            </p>
-            <UFormGroup label="Pontuação (1 a 5)">
-              <UInput
-                v-model="reviewForm.rating"
-                type="number"
-                min="1"
-                max="5"
-              />
-            </UFormGroup>
-            <UFormGroup label="Comentário">
-              <UTextarea
-                v-model="reviewForm.comment"
-                autoresize
-                placeholder="Partilha a tua experiência"
-              />
-            </UFormGroup>
-            <UButton
-              color="gray"
-              :loading="isReviewSubmitting"
-              @click="submitReview"
-            >
-              Enviar Avaliação
-            </UButton>
-            <p
-              v-if="!canReview"
-              class="text-xs text-gray-500"
-            >
-              A submissão fica disponível após uma troca concluída.
-            </p>
+          <div class="bg-stone-50 rounded-xl p-6 border border-stone-100 h-fit">
+            <h3 class="text-lg font-bold text-stone-900 mb-4 border-b border-stone-200 pb-2">Deixar Avaliação</h3>
+
+            <div class="space-y-4">
+              <div class="space-y-2">
+                <label class="block text-sm font-semibold text-stone-800">Pontuação (1 a 5)</label>
+                <UInput v-model="reviewForm.rating" type="number" min="1" max="5" size="lg" class="bg-white" />
+              </div>
+
+              <div class="space-y-2">
+                <label class="block text-sm font-semibold text-stone-800">Comentário</label>
+                <UTextarea v-model="reviewForm.comment" autoresize :rows="3" placeholder="Partilha a tua experiência sobre esta troca..." size="lg" class="bg-white" />
+              </div>
+
+              <UButton
+                block
+                size="lg"
+                class="bg-[#C5893C] hover:bg-[#A87431] text-white font-bold mt-2"
+                :loading="isReviewSubmitting"
+                :disabled="!canReview"
+                @click="submitReview"
+              >
+                Submeter Avaliação
+              </UButton>
+
+              <p v-if="!canReview" class="text-xs text-amber-700 bg-amber-100 p-2 rounded-lg mt-2 text-center flex items-center justify-center gap-1">
+                <UIcon name="i-heroicons-information-circle" /> Apenas disponível após concluires uma troca.
+              </p>
+            </div>
           </div>
         </div>
       </UCard>
