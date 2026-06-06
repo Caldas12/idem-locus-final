@@ -5,15 +5,19 @@
  */
 useHead({
   titleTemplate: (titleChunk) => {
-    return titleChunk ? `${titleChunk} - Idem Locus` : 'Idem Locus - Partilha Local'
+    return titleChunk
+      ? `${titleChunk} - Idem Locus`
+      : 'Idem Locus - Partilha Local'
   },
   meta: [
     { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-    { name: 'description', content: 'Plataforma de partilha de excedentes alimentares e trocas locais.' }
+    {
+      name: 'description',
+      content:
+        'Plataforma de partilha de excedentes alimentares e trocas locais.'
+    }
   ],
-  link: [
-    { rel: 'icon', href: '/favicon.ico' }
-  ],
+  link: [{ rel: 'icon', href: '/favicon.ico' }],
   htmlAttrs: {
     lang: 'pt'
   }
@@ -23,7 +27,8 @@ useHead({
 useSeoMeta({
   ogTitle: 'Idem Locus',
   ogDescription: 'Reduz o desperdício alimentar na tua comunidade.',
-  ogImage: 'https://images.unsplash.com/photo-1498575207490-1698c5d8f2b6?q=80&w=1200&auto=format&fit=crop',
+  ogImage:
+    'https://images.unsplash.com/photo-1498575207490-1698c5d8f2b6?q=80&w=1200&auto=format&fit=crop',
   twitterCard: 'summary_large_image'
 })
 </script>
@@ -44,6 +49,8 @@ useSeoMeta({
 
     <!-- Componente global para Modais (caso precises no futuro) -->
     <UModalProvider />
+
+    <AppFooter />
   </div>
 </template>
 

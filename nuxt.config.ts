@@ -1,30 +1,22 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: [
-    '@nuxt/eslint',
-    '@nuxt/ui',
-    '@nuxtjs/supabase'
-  ],
-
-  supabase: {
-      redirect: false
-    },
+  modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxtjs/supabase'],
 
   devtools: {
     enabled: true
   },
 
+  css: ['~/assets/css/main.css'],
+
   colorMode: {
-      preference: 'light',
-      fallback: 'light',
-      classSuffix: '' // Isto impede que o Nuxt adicione a classe .dark ao <html>
-    },
+    preference: 'light',
+    fallback: 'light',
+    classSuffix: '' // Isto impede que o Nuxt adicione a classe .dark ao <html>
+  },
 
   ui: {
-      safelistColors: ['amber', 'stone']
-    },
-
-  css: ['~/assets/css/main.css'],
+    safelistColors: ['amber', 'stone']
+  },
 
   routeRules: {
     '/': { prerender: true }
@@ -39,5 +31,9 @@ export default defineNuxtConfig({
         braceStyle: '1tbs'
       }
     }
+  },
+
+  supabase: {
+    redirect: false
   }
 })

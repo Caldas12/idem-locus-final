@@ -8,7 +8,9 @@ export const useSeller = () => {
     if (!user.value) return []
     const { data, error } = await supabase
       .from('products')
-      .select('id, title, description, image, condition, type, status, category_id, expires_at, is_surprise_basket, created_at')
+      .select(
+        'id, title, description, image, condition, type, status, category_id, expires_at, created_at'
+      )
       .eq('profile_id', user.value.id)
       .order('created_at', { ascending: false })
 

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { productSchema, validateForm } from '~/utils/validation'
 
 definePageMeta({
   middleware: 'auth'
@@ -11,93 +10,68 @@ const supabase = useSupabaseClient()
 const isLoading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
-const fieldErrors = ref<Record<string, string>>({})
 
 const selectedFile = ref<File | null>(null)
-const imagePreview = ref<string>('')
+const imagePreview = ref('')
+
+type Category = {
+  id: number
+  name: string
+}
 
 const form = ref({
   title: '',
   description: '',
-  condition: 'Fresco' as const,
-  type: 'Troca Direta' as const,
-  categoryId: null as number | null,
+  condition: 'Fresco',
+  type: 'Make your offer', // Pode ser 'Donativo', 'Make your offer' ou 'Preço Fixo'
+  price: 0, // NOVO CAMPO DE PREÇO
+  categoryId: '' as number | string,
   expiresAt: '',
-  status: 'Disponível' as const,
-  isSurpriseBasket: false
+  status: 'Disponível'
 })
 
-// 1. Opções fixas com a estrutura EXATA que o USelectMenu exige
-const conditionOptions = [
-  { label: 'Maduro', value: 'Maduro' },
-  { label: 'Fresco', value: 'Fresco' },
-  { label: 'Defeito Visual', value: 'Defeito Visual' },
-  { label: 'Próximo da validade', value: 'Próximo da validade' },
-  { label: 'Embalado', value: 'Embalado' }
-]
+const { data: dbCategories } = await useAsyncData<Category[]>(
+  'publish-categories',
+  async () => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('id,name')
+      .order('name')
 
-const typeOptions = [
-  { label: 'Donativo', value: 'Donativo' },
-  { label: 'Troca Direta', value: 'Troca Direta' },
-  { label: 'Preço Simbólico', value: 'Preço Simbólico' }
-]
-
-const statusOptions = [
-  { label: 'Disponível', value: 'Disponível' },
-  { label: 'Indisponível', value: 'Indisponível' },
-  { label: 'Esgotado', value: 'Esgotado' }
-]
-
-// 2. Fetch apenas das Categorias (com tratamento de erro silencioso do Supabase)
-const { data: dbCategories } = await useAsyncData('publish-categories', async () => {
-  const { data, error } = await supabase.from('categories').select('id, name').order('name')
-  if (error) console.error('Erro no Supabase:', error)
-  return data || []
-})
-
-const categoryOptions = computed(() => {
-  if (!dbCategories.value || dbCategories.value.length === 0) {
-    return [] // Retorna vazio em vez das opções marcadas como (Teste)
+    if (error) {
+      console.error(error)
+      return []
+    }
+    return (data ?? []) as Category[]
   }
-  return dbCategories.value.map(c => ({ label: c.name, value: c.id }))
-})
+)
 
 const canPublish = computed(() => {
-  return Boolean(form.value.title.trim()) && Boolean(form.value.categoryId)
+  return !!form.value.title.trim() && !!form.value.categoryId
 })
 
 function handleFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (file) {
-    selectedFile.value = file
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      imagePreview.value = e.target?.result as string
-    }
-    reader.readAsDataURL(file)
+
+  if (!file) return
+
+  selectedFile.value = file
+  const reader = new FileReader()
+
+  reader.onload = (e) => {
+    imagePreview.value = e.target?.result as string
   }
+
+  reader.readAsDataURL(file)
 }
 
 async function publishProduct() {
-  fieldErrors.value = {}
   errorMessage.value = ''
   successMessage.value = ''
 
-  const validation = validateForm(productSchema, {
-    title: form.value.title,
-    description: form.value.description,
-    categoryId: form.value.categoryId || 0,
-    condition: form.value.condition,
-    type: form.value.type,
-    status: form.value.status,
-    expiresAt: form.value.expiresAt,
-    isSurpriseBasket: form.value.isSurpriseBasket
-  })
-
-  if (!validation.success) {
-    fieldErrors.value = validation.errors || {}
-    errorMessage.value = 'Por favor, preenche todos os campos obrigatórios.'
+  if (!form.value.title.trim() || !form.value.categoryId) {
+    errorMessage.value = 'Título e Categoria são obrigatórios.'
     return
   }
 
@@ -105,43 +79,56 @@ async function publishProduct() {
 
   try {
     const { data: authData } = await supabase.auth.getUser()
-    const currentUser = authData.user
 
-    if (!currentUser) throw new Error('Sessão inválida. Faz login novamente.')
+    if (!authData.user) {
+      throw new Error('Sessão inválida.')
+    }
 
     let finalImageUrl = ''
 
     if (selectedFile.value) {
-      const uniqueName = `${Date.now()}-${selectedFile.value.name.replace(/[^a-zA-Z0-9.]/g, '')}`
-      const { data: uploadData, error: uploadError } = await supabase.storage.from('produtos').upload(uniqueName, selectedFile.value)
-      if (uploadError) throw new Error('Erro ao carregar a imagem: ' + uploadError.message)
-      const { data: publicUrlData } = supabase.storage.from('produtos').getPublicUrl(uploadData.path)
+      const fileName = `${Date.now()}-${selectedFile.value.name.replace(/[^a-zA-Z0-9.]/g, '')}`
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('produtos')
+        .upload(fileName, selectedFile.value)
+
+      if (uploadError) throw uploadError
+
+      const { data: publicUrlData } = supabase.storage
+        .from('produtos')
+        .getPublicUrl(uploadData.path)
+
       finalImageUrl = publicUrlData.publicUrl
     }
 
     const payload = {
       title: form.value.title,
       description: form.value.description,
+      profile_id: authData.user.id,
+      category_id: form.value.categoryId,
       condition: form.value.condition,
       type: form.value.type,
-      image: finalImageUrl || '🧺',
-      profile_id: currentUser.id,
-      category_id: form.value.categoryId,
-      expires_at: form.value.expiresAt || null,
+      // Grava o preço apenas se for um preço fixo, senão grava 0
+      price: form.value.type === 'Preço Fixo' ? form.value.price : 0,
       status: form.value.status,
-      is_surprise_basket: form.value.isSurpriseBasket
+      expires_at: form.value.expiresAt || null,
+      image: finalImageUrl || null
     }
 
-    const { error: productError } = await supabase.from('products').insert(payload)
-    if (productError) throw new Error(productError.message)
+    const { error } = await supabase.from('products').insert(payload)
 
-    successMessage.value = '✅ Produto publicado com sucesso!'
+    if (error) throw error
 
-    // Reset form e redirecionar
-    setTimeout(() => { navigateTo('/dashboard') }, 1500)
+    successMessage.value = 'Produto publicado com sucesso.'
 
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Erro ao publicar.'
+    setTimeout(() => {
+      navigateTo('/dashboard')
+    }, 1000)
+  } catch (err) {
+    console.error(err)
+    errorMessage.value
+      = err instanceof Error ? err.message : 'Erro ao publicar.'
   } finally {
     isLoading.value = false
   }
@@ -149,92 +136,292 @@ async function publishProduct() {
 </script>
 
 <template>
-  <UContainer class="py-10 max-w-4xl space-y-8">
-    <div>
-      <h1 class="text-3xl font-bold text-[var(--primary)]">
-        Publicar Excedente
-      </h1>
-      <p class="text-[var(--text-soft)] mt-2 text-lg">
-        Preenche os detalhes com carinho para que a comunidade saiba o que partilhas.
-      </p>
-    </div>
-
-    <UAlert v-if="errorMessage" color="red" variant="soft" :title="errorMessage" icon="i-heroicons-exclamation-triangle" />
-    <UAlert v-if="successMessage" color="green" variant="soft" :title="successMessage" icon="i-heroicons-check-circle" />
-
-    <UCard :ui="{ body: 'p-6 sm:p-8' }">
-      <div class="space-y-10">
-
-        <div class="space-y-5">
-          <h2 class="text-xl font-semibold text-[var(--primary)] border-b border-[var(--border)] pb-2">
-            1. O que tens para oferecer?
-          </h2>
-          <div class="grid grid-cols-1 gap-5">
-            <UFormGroup label="Título do Produto" required :error="fieldErrors.title">
-              <UInput v-model="form.title" placeholder="Ex: Cesto de Laranjas Doces" size="lg" />
-            </UFormGroup>
-            <UFormGroup label="Descrição detalhada" :error="fieldErrors.description">
-              <UTextarea v-model="form.description" autoresize :rows="4" placeholder="Conta a história do produto..." />
-            </UFormGroup>
-          </div>
-        </div>
-
-        <div class="space-y-5">
-          <h2 class="text-xl font-semibold text-[var(--primary)] border-b border-[var(--border)] pb-2">
-            2. Fotografia (Opcional)
-          </h2>
-          <div class="border-2 border-dashed border-[var(--border)] rounded-xl p-6 bg-[var(--bg)] flex flex-col md:flex-row gap-6 items-center">
-            <div class="flex-1 w-full">
-              <label class="block mb-2 text-sm font-medium text-[var(--text)]">Carregar Imagem</label>
-              <input type="file" accept="image/*" class="block w-full text-sm text-[var(--text-soft)] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer" @change="handleFile">
-            </div>
-            <div v-if="imagePreview" class="relative">
-              <img :src="imagePreview" alt="Prévia" class="w-32 h-32 object-cover rounded-lg shadow-sm border border-[var(--border)]">
-              <UButton color="red" variant="solid" icon="i-heroicons-trash" size="2xs" class="absolute -top-2 -right-2 rounded-full" @click="imagePreview = ''; selectedFile = null" />
-            </div>
-          </div>
-        </div>
-
-        <div class="space-y-5">
-          <h2 class="text-xl font-semibold text-[var(--primary)] border-b border-[var(--border)] pb-2">
-            3. Detalhes e Logística
-          </h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            <UFormGroup label="Categoria" required :error="fieldErrors.categoryId">
-              <USelectMenu v-model="form.categoryId" :options="categoryOptions" option-attribute="label" value-attribute="value" placeholder="Seleciona uma categoria..." />
-            </UFormGroup>
-
-            <UFormGroup label="Validade / Consumir até">
-              <UInput v-model="form.expiresAt" type="date" icon="i-heroicons-calendar" />
-            </UFormGroup>
-
-            <UFormGroup label="Estado Físico">
-              <USelectMenu v-model="form.condition" :options="conditionOptions" option-attribute="label" value-attribute="value" />
-            </UFormGroup>
-
-            <UFormGroup label="Modelo de partilha">
-              <USelectMenu v-model="form.type" :options="typeOptions" option-attribute="label" value-attribute="value" />
-            </UFormGroup>
-
-            <UFormGroup label="Visibilidade do Anúncio">
-              <USelectMenu v-model="form.status" :options="statusOptions" option-attribute="label" value-attribute="value" />
-            </UFormGroup>
-
-            <UFormGroup class="flex items-end pb-1">
-              <UCheckbox v-model="form.isSurpriseBasket" label="Isto é um Cabaz Surpresa 📦" />
-            </UFormGroup>
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-3 pt-6 border-t border-[var(--border)]">
-          <UButton to="/" color="gray" variant="ghost" size="lg">Cancelar</UButton>
-          <UButton :loading="isLoading" :disabled="!canPublish" color="primary" icon="i-heroicons-paper-airplane" size="lg" @click="publishProduct">
-            Publicar Excedente
-          </UButton>
-        </div>
-
+  <div class="idem-page min-h-screen">
+    <section class="bg-[var(--primary)] py-12 text-[#F5EDD8]">
+      <div class="mx-auto max-w-3xl px-6">
+        <p class="idem-eyebrow mb-2">
+          Partilhar
+        </p>
+        <h1 class="mb-3 text-5xl font-bold leading-tight">
+          Publicar troca
+        </h1>
+        <p class="text-[var(--primary-soft)]">
+          Conta à comunidade o que tens disponível e como gostarias de trocar.
+        </p>
       </div>
-    </UCard>
-  </UContainer>
+    </section>
+
+    <section class="mx-auto max-w-3xl px-6 py-12">
+      <UAlert
+        v-if="errorMessage"
+        color="red"
+        variant="soft"
+        :title="errorMessage"
+        icon="i-heroicons-exclamation-triangle"
+        class="mb-6"
+      />
+      <UAlert
+        v-if="successMessage"
+        color="green"
+        variant="soft"
+        :title="successMessage"
+        icon="i-heroicons-check-circle"
+        class="mb-6"
+      />
+
+      <form
+        class="space-y-8"
+        @submit.prevent="publishProduct"
+      >
+        <div>
+          <label
+            class="mb-3 block text-sm font-semibold text-[var(--foreground)]"
+          >Foto do produto</label>
+          <label
+            class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--card)] py-12 text-center transition-colors hover:border-[var(--primary)]"
+          >
+            <input
+              type="file"
+              accept="image/*"
+              class="sr-only"
+              @change="handleFile"
+            >
+            <template v-if="imagePreview">
+              <img
+                :src="imagePreview"
+                alt="Pré-visualização"
+                class="mb-4 h-40 w-40 rounded-xl border border-[var(--border)] object-cover shadow-sm"
+              >
+              <button
+                type="button"
+                class="rounded-full border border-[var(--border)] px-4 py-2 text-sm text-[var(--foreground)]"
+                @click.prevent="
+                  imagePreview = '';
+                  selectedFile = null;
+                "
+              >
+                Remover foto
+              </button>
+            </template>
+            <template v-else>
+              <UIcon
+                name="i-lucide-upload"
+                class="mb-3 h-8 w-8 text-[#5C6B5E] opacity-50"
+              />
+              <p class="text-sm text-[#5C6B5E]">
+                Clica para enviar ou arrasta a foto aqui
+              </p>
+              <p class="mt-1 text-xs text-[#5C6B5E] opacity-70">
+                PNG ou JPG até 10MB
+              </p>
+            </template>
+          </label>
+        </div>
+
+        <div class="grid gap-6 sm:grid-cols-2">
+          <div class="space-y-1.5">
+            <label class="block text-sm font-semibold text-[var(--foreground)]">Título do produto <span class="text-red-500">*</span></label>
+            <UInput
+              v-model="form.title"
+              placeholder="Ex: Cesto de laranjas doces"
+              size="lg"
+              class="w-full bg-white"
+            />
+          </div>
+
+          <div class="space-y-1.5 relative">
+            <label class="block text-sm font-semibold text-[var(--foreground)]">Categoria <span class="text-red-500">*</span></label>
+            <select
+              v-model="form.categoryId"
+              class="w-full h-[44px] bg-white border border-stone-200 rounded-lg px-4 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none shadow-sm cursor-pointer"
+            >
+              <option
+                value=""
+                disabled
+                selected
+              >
+                Seleciona uma categoria...
+              </option>
+              <option
+                v-for="cat in dbCategories"
+                :key="cat.id"
+                :value="cat.id"
+              >
+                {{ cat.name }}
+              </option>
+            </select>
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="absolute right-3 bottom-3.5 h-4 w-4 text-stone-400 pointer-events-none"
+            />
+          </div>
+        </div>
+
+        <div class="grid gap-6 sm:grid-cols-2">
+          <div class="space-y-1.5">
+            <label class="block text-sm font-semibold text-[var(--foreground)]">Validade / Consumir até</label>
+            <UInput
+              v-model="form.expiresAt"
+              type="date"
+              icon="i-lucide-calendar"
+              size="lg"
+              class="w-full bg-white"
+            />
+          </div>
+
+          <div class="space-y-1.5 relative">
+            <label class="block text-sm font-semibold text-[var(--foreground)]">Estado físico</label>
+            <select
+              v-model="form.condition"
+              class="w-full h-[44px] bg-white border border-stone-200 rounded-lg px-4 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none shadow-sm cursor-pointer"
+            >
+              <option value="Fresco">
+                Fresco
+              </option>
+              <option value="Maduro">
+                Maduro
+              </option>
+              <option value="Defeito Visual">
+                Defeito Visual
+              </option>
+              <option value="Próximo da validade">
+                Próximo da validade
+              </option>
+              <option value="Embalado">
+                Embalado
+              </option>
+            </select>
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="absolute right-3 bottom-3.5 h-4 w-4 text-stone-400 pointer-events-none"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block text-sm font-semibold text-[var(--foreground)]">Descrição detalhada</label>
+          <UTextarea
+            v-model="form.description"
+            autoresize
+            :rows="4"
+            placeholder="Conta mais sobre o produto: origem, conservação, quantidade ou detalhes importantes..."
+            size="lg"
+            class="w-full bg-white"
+          />
+        </div>
+
+        <div
+          class="rounded-2xl bg-[var(--card)] border border-[var(--border)] p-6 shadow-sm"
+        >
+          <div
+            class="mb-5 flex items-center gap-2 border-b border-[var(--border)] pb-3"
+          >
+            <UIcon
+              name="i-lucide-repeat-2"
+              class="h-5 w-5 text-[var(--accent)]"
+            />
+            <p class="text-base font-semibold text-[var(--foreground)]">
+              Como queres partilhar?
+            </p>
+          </div>
+
+          <div class="grid gap-6 sm:grid-cols-2">
+            <div class="space-y-1.5 relative">
+              <label
+                class="block text-sm font-semibold text-[var(--foreground)]"
+              >Preço</label>
+              <select
+                v-model="form.type"
+                class="w-full h-[44px] bg-white border border-stone-200 rounded-lg px-4 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none shadow-sm cursor-pointer"
+              >
+                <option value="Donativo">
+                  Donativo (Grátis)
+                </option>
+                <option value="Make your offer">
+                  Make your offer (Aberto a propostas)
+                </option>
+                <option value="Preço Fixo">
+                  Preço Fixo
+                </option>
+              </select>
+              <UIcon
+                name="i-lucide-chevron-down"
+                class="absolute right-3 bottom-3.5 h-4 w-4 text-stone-400 pointer-events-none"
+              />
+            </div>
+
+            <div class="space-y-1.5 relative">
+              <label
+                class="block text-sm font-semibold text-[var(--foreground)]"
+              >Visibilidade do anúncio</label>
+              <select
+                v-model="form.status"
+                class="w-full h-[44px] bg-white border border-stone-200 rounded-lg px-4 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none shadow-sm cursor-pointer"
+              >
+                <option value="Disponível">
+                  Disponível
+                </option>
+                <option value="Indisponível">
+                  Indisponível (Pausado)
+                </option>
+                <option value="Esgotado">
+                  Esgotado
+                </option>
+              </select>
+              <UIcon
+                name="i-lucide-chevron-down"
+                class="absolute right-3 bottom-3.5 h-4 w-4 text-stone-400 pointer-events-none"
+              />
+            </div>
+          </div>
+
+          <div
+            v-if="form.type === 'Preço Fixo'"
+            class="mt-6 pt-4 border-t border-[var(--border)]"
+          >
+            <label
+              class="block text-sm font-semibold text-[var(--foreground)] mb-2"
+            >Valor da venda (€)</label>
+            <UInput
+              v-model="form.price"
+              type="number"
+              min="0"
+              step="0.5"
+              icon="i-heroicons-currency-euro"
+              size="lg"
+              class="w-full sm:max-w-xs bg-white"
+              placeholder="0.00"
+            />
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-4 pt-4 sm:flex-row">
+          <button
+            type="submit"
+            class="flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--primary)] py-4 text-[#F5EDD8] font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="!canPublish || isLoading"
+          >
+            <UIcon
+              v-if="isLoading"
+              name="i-lucide-loader-circle"
+              class="h-5 w-5 animate-spin"
+            />
+            <UIcon
+              v-else
+              name="i-lucide-arrow-right"
+              class="h-5 w-5"
+            />
+            Publicar troca
+          </button>
+
+          <NuxtLink
+            to="/dashboard"
+            class="flex items-center justify-center rounded-full border border-[var(--border)] bg-white px-8 py-4 font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--primary)] hover:bg-stone-50"
+          >
+            Cancelar
+          </NuxtLink>
+        </div>
+      </form>
+    </section>
+  </div>
 </template>

@@ -15,10 +15,15 @@ async function handleLogin() {
 
     if (error) throw error
 
-    toast.add({ title: 'Bem-vindo de volta!', color: 'green' })
+    toast.add({ title: 'Bem-vindo de volta!', color: 'success' })
     navigateTo('/dashboard')
-  } catch (error: any) {
-    toast.add({ title: 'Erro no login', description: error.message, color: 'red' })
+  } catch (error: unknown) {
+    toast.add({
+      title: 'Erro no login',
+      description:
+        error instanceof Error ? error.message : 'Falha ao iniciar sessão.',
+      color: 'error'
+    })
   } finally {
     loading.value = false
   }
@@ -29,11 +34,15 @@ async function handleLogin() {
   <UContainer class="max-w-md py-20">
     <UCard class="shadow-lg border border-stone-200">
       <template #header>
-        <h1 class="text-2xl font-bold text-center text-stone-900 font-serif">Entrar</h1>
+        <h1 class="text-2xl font-bold text-center text-stone-900 font-serif">
+          Entrar
+        </h1>
       </template>
 
-      <form @submit.prevent="handleLogin" class="space-y-6">
-
+      <form
+        class="space-y-6"
+        @submit.prevent="handleLogin"
+      >
         <div class="space-y-2">
           <label class="block text-sm font-semibold text-stone-800">Email</label>
           <UInput
@@ -50,7 +59,10 @@ async function handleLogin() {
         <div class="space-y-2">
           <div class="flex justify-between items-center">
             <label class="block text-sm font-semibold text-stone-800">Palavra-passe</label>
-            <NuxtLink to="/forgot-password" class="text-xs text-amber-600 hover:underline">Esqueci-me</NuxtLink>
+            <NuxtLink
+              to="/forgot-password"
+              class="text-xs text-amber-600 hover:underline"
+            >Esqueci-me</NuxtLink>
           </div>
           <UInput
             v-model="password"
@@ -77,7 +89,10 @@ async function handleLogin() {
       <template #footer>
         <p class="text-sm text-center text-stone-500">
           Ainda não tem conta?
-          <NuxtLink to="/register" class="text-[#C5893C] font-bold hover:underline">Registe-se aqui</NuxtLink>
+          <NuxtLink
+            to="/register"
+            class="text-[#C5893C] font-bold hover:underline"
+          >Registe-se aqui</NuxtLink>
         </p>
       </template>
     </UCard>

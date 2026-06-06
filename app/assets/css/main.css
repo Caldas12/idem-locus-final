@@ -2,24 +2,53 @@
 @import "@nuxt/ui";
 
 @theme {
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-serif: 'Playfair Display', serif; /* Fonte elegante para os títulos */
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-serif: "Fraunces", Georgia, serif;
 }
 
-/* Configuração de base para garantir que o Light Mode domina */
+:root {
+  --background: #f5edd8;
+  --foreground: #1a2e1e;
+  --card: #fdfaf3;
+  --primary: #1e3932;
+  --primary-deep: #1a2e1e;
+  --primary-soft: #a8c5ac;
+  --accent: #c9a227;
+  --muted: #ebe2c8;
+  --border: rgba(30, 57, 50, 0.15);
+}
+
 body {
-  @apply bg-[#FDFCFB] text-stone-900 antialiased;
+  @apply bg-(--background) text-(--foreground) antialiased;
+  font-family: var(--font-sans);
 }
 
-/* Títulos elegantes */
-h1, h2, .font-serif {
+h1,
+h2,
+.font-serif {
   font-family: var(--font-serif);
 }
 
-/* Scrollbar suave para os filtros */
+.idem-page {
+  @apply bg-(--background) text-(--foreground);
+}
+
+.idem-container {
+  @apply mx-auto w-full max-w-7xl px-6;
+}
+
+.idem-eyebrow {
+  @apply text-sm uppercase tracking-widest text-(--accent);
+}
+
+.idem-pill {
+  @apply rounded-full px-5 py-2 text-sm transition-all duration-200;
+}
+
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
